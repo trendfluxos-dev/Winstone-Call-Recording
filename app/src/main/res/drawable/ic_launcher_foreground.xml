@@ -1,0 +1,41 @@
+<vector xmlns:android="http://schemas.android.com/apk/res/android"
+    android:width="108dp"
+    android:height="108dp"
+    android:viewportWidth="108"
+    android:viewportHeight="108">
+    <group
+        android:translateX="0"
+        android:translateY="0">
+        <!-- Shield / Badge background -->
+        <path
+            android:fillColor="#1E293B"
+            android:pathData="M54,20 C68,20 78,25 78,35 C78,62 54,84 54,84 C54,84 30,62 30,35 C30,25 40,20 54,20 Z" />
+        
+        <!-- Phone Handset icon -->
+        <path
+            android:fillColor="#38BDF8"
+            android:pathData="M44.5,33 C43.1,33 42,34.1 42,35.5 C42,46.5 50.5,55 61.5,55 C62.9,55 64,53.9 64,52.5 L64,48.5 C64,47.7 63.4,47 62.6,46.8 L57.8,45.8 C57.2,45.7 56.6,46 56.2,46.4 L54.4,48.2 C51.3,46.6 48.4,43.7 46.8,40.6 L48.6,38.8 C49,38.4 49.3,37.8 49.2,37.2 L48.2,32.4 C48,31.6 47.3,31 46.5,31 L44.5,33 Z" />
+            
+        <!-- Recording Waveform Bars -->
+        <path
+            android:fillColor="#EF4444"
+            android:pathData="M40,65 L44,65 L44,71 L40,71 Z" />
+        <path
+            android:fillColor="#F59E0B"
+            android:pathData="M47,61 L51,61 L51,75 L47,75 Z" />
+        <path
+            android:fillColor="#10B981"
+            android:pathData="M54,57 L58,57 L58,79 L54,79 Z" />
+        <path
+            android:fillColor="#3B82F6"
+            android:pathData="M61,61 L65,61 L65,75 L61,75 Z" />
+        <path
+            android:fillColor="#8B5CF6"
+            android:pathData="M68,65 L72,65 L72,71 L68,71 Z" />
+
+        <!-- Recording Indicator Dot -->
+        <path
+            android:fillColor="#EF4444"
+            android:pathData="M68,30 A4,4 0 1,0 68,38 A4,4 0 1,0 68,30" />
+    </group>
+</vector>

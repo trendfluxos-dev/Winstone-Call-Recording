@@ -1,0 +1,6 @@
+{
+  "name": "Winstone Auto Call Recorder",
+  "description": "Native Android call management and call recording companion app for Winstone CRM on Proton HyperX and Android 16.",
+  "requestFramePermissions": [],
+  "majorCapabilities": ["MAJOR_CAPABILITY_SERVER_SIDE_GEMINI_API"]
+}
