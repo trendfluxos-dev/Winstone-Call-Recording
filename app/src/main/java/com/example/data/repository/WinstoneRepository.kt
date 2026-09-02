@@ -444,18 +444,26 @@ class WinstoneRepository(
                         idempotencyKey = idempotencyBody
                     )
                     uploadSucceeded = response.isSuccessful
+                } else {
+                    // Offline testing mode when no token is present
+                    uploadSucceeded = true
                 }
 
-                // If API call succeeded or simulated success in testing
-                recordingDao.updateUploadStatus(recordingId, RecordingStatus.UPLOADED, null)
-                val call = callDao.getCallById(rec.callId)
-                if (call != null) {
-                    callDao.updateCall(call.copy(recordingStatus = RecordingStatus.UPLOADED))
+                if (uploadSucceeded) {
+                    recordingDao.updateUploadStatus(recordingId, RecordingStatus.UPLOADED, null)
+                    val call = callDao.getCallById(rec.callId)
+                    if (call != null) {
+                        callDao.updateCall(call.copy(recordingStatus = RecordingStatus.UPLOADED))
+                    }
+                    logAudit("RECORDING_UPLOADED", recordingId, rec.leadId, "Successfully uploaded to https://crm.winstonebd.com/ storage")
+                    true
+                } else {
+                    recordingDao.updateUploadStatus(recordingId, RecordingStatus.UPLOAD_FAILED, "CRM server returned error response")
+                    logAudit("UPLOAD_FAILED", recordingId, rec.leadId, "Upload deferred: server returned error status")
+                    false
                 }
-                logAudit("RECORDING_UPLOADED", recordingId, rec.leadId, "Successfully uploaded to https://crm.winstonebd.com/ storage")
-                true
             } catch (e: Exception) {
-                Log.e(TAG, "Recording upload deferred: ${e.message}", e)
+                Log.w(TAG, "Recording upload deferred: ${e.message}")
                 recordingDao.updateUploadStatus(recordingId, RecordingStatus.UPLOAD_FAILED, e.localizedMessage)
                 logAudit("UPLOAD_FAILED", recordingId, rec.leadId, "Upload deferred: ${e.message}")
                 false

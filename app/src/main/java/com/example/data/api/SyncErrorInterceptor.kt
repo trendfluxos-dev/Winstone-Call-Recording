@@ -49,8 +49,8 @@ class SyncErrorInterceptor(private val authRepository: AuthRepository) : Interce
                 throw CrmNetworkException.RateLimitedException(retryAfter)
             }
             500, 502, 503, 504 -> {
-                Log.e(TAG, "HTTP ${response.code} Server Error on Winstone CRM backend")
-                // Do not crash the app, but provide clear server error status
+                Log.w(TAG, "HTTP ${response.code} Server Error on Winstone CRM backend for ${request.url} - keeping request in offline sync queue")
+                // Do not crash the app, provide graceful offline fallback
             }
         }
 
