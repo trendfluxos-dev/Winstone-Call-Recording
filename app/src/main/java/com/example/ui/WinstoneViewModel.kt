@@ -163,8 +163,18 @@ class WinstoneViewModel(application: Application) : AndroidViewModel(application
             // Enqueue WorkManager immediate sync for reliable background and offline handling
             com.example.sync.CrmSyncWorker.enqueueImmediateSync(getApplication())
             val count = repository.syncAllPending()
+            repository.fetchAssignedLeadsFromCrm()
             _isSyncing.value = false
             _userMessage.value = "Synced $count items with ${crmBaseUrl.value}"
+        }
+    }
+
+    fun refreshLeads() {
+        viewModelScope.launch {
+            _isSyncing.value = true
+            val leads = repository.fetchAssignedLeadsFromCrm()
+            _isSyncing.value = false
+            _userMessage.value = "Updated ${leads.size} leads from CRM"
         }
     }
 

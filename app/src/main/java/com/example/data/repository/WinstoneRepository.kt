@@ -71,69 +71,57 @@ class WinstoneRepository(
 
     init {
         CoroutineScope(Dispatchers.IO).launch {
-            seedInitialDataIfNeeded()
-            refreshDeviceProfile()
-            processOfflineSyncQueue()
+            if (authRepository.isSessionValid()) {
+                fetchAssignedLeadsFromCrm()
+                refreshDeviceProfile()
+                processOfflineSyncQueue()
+            }
         }
     }
 
-    private suspend fun seedInitialDataIfNeeded() {
-        val leadCount = database.openHelper.readableDatabase.compileStatement("SELECT COUNT(*) FROM leads").simpleQueryForLong()
-        if (leadCount == 0L) {
-            val initialLeads = networkClient.getInitialSeedLeads()
-            leadDao.insertLeads(initialLeads)
+    /**
+     * Synchronizes authorized leads for the currently authenticated agent directly from Winstone CRM.
+     */
+    suspend fun fetchAssignedLeadsFromCrm(): List<CrmLead> {
+        return withContext(Dispatchers.IO) {
+            val token = authRepository.getAuthToken()
+            if (token.isNullOrBlank()) {
+                return@withContext leadDao.getAllLeadsList()
+            }
 
-            // Seed initial realistic activity
-            val call1 = CallRecord(
-                callId = "call_init_01",
-                phoneNumber = "01711223344",
-                normalizedNumber = "+8801711223344",
-                direction = CallDirection.OUTGOING,
-                startedAt = System.currentTimeMillis() - 3600000L * 4,
-                endedAt = System.currentTimeMillis() - 3600000L * 4 + 272000L,
-                durationSeconds = 272,
-                agentId = authRepository.session.value.agentId,
-                deviceId = authRepository.getDeviceId(),
-                leadId = "lead_001",
-                leadName = "Tanvir Ahmed",
-                leadCompany = "Apex Footwear Ltd",
-                outcome = "Proposal Requested",
-                notes = "Discussed CRM enterprise tier pricing. Needs revised quotation by Thursday.",
-                followUpDate = "03 Sep 2026",
-                recordingStatus = RecordingStatus.RECORDING_UNAVAILABLE,
-                consentStatus = ConsentStatus.INFORMATIONAL,
-                syncStatus = "SYNCED"
-            )
+            try {
+                // 1. Attempt authoritative public endpoint first
+                val publicResp = try {
+                    networkClient.api.getAssignedLeadsPublic("Bearer $token")
+                } catch (e: Exception) {
+                    null
+                }
 
-            val call2 = CallRecord(
-                callId = "call_init_02",
-                phoneNumber = "01819876543",
-                normalizedNumber = "+8801819876543",
-                direction = CallDirection.INCOMING,
-                startedAt = System.currentTimeMillis() - 3600000L * 2,
-                endedAt = System.currentTimeMillis() - 3600000L * 2 + 185000L,
-                durationSeconds = 185,
-                agentId = authRepository.session.value.agentId,
-                deviceId = authRepository.getDeviceId(),
-                leadId = "lead_002",
-                leadName = "Farzana Yasmin",
-                leadCompany = "Beximco Pharma",
-                outcome = "Follow-up Scheduled",
-                notes = "Customer called to verify API integration security standards.",
-                followUpDate = "05 Sep 2026",
-                recordingStatus = RecordingStatus.RECORDING_UNAVAILABLE,
-                consentStatus = ConsentStatus.OBTAINED,
-                syncStatus = "SYNCED"
-            )
+                val leads = if (publicResp?.isSuccessful == true && publicResp.body()?.leads != null) {
+                    publicResp.body()!!.leads
+                } else {
+                    // 2. Fallback to v1 endpoint
+                    val v1Resp = try {
+                        networkClient.api.getAssignedLeads("Bearer $token")
+                    } catch (e: Exception) {
+                        null
+                    }
+                    if (v1Resp?.isSuccessful == true && v1Resp.body()?.leads != null) {
+                        v1Resp.body()!!.leads
+                    } else {
+                        emptyList()
+                    }
+                }
 
-            callDao.insertCall(call1)
-            callDao.insertCall(call2)
-
-            logAudit(
-                action = "DEVICE_REGISTERED",
-                entityId = authRepository.getDeviceId(),
-                metadata = "Proton HyperX Android 16 device initialized with https://crm.winstonebd.com/"
-            )
+                if (leads.isNotEmpty()) {
+                    leadDao.insertLeads(leads)
+                    logAudit("LEADS_SYNCED", authRepository.session.value.agentId, metadata = "Received ${leads.size} assigned leads from CRM")
+                }
+                leads
+            } catch (e: Exception) {
+                Log.w(TAG, "Leads fetch failed or offline: ${e.message}")
+                leadDao.getAllLeadsList()
+            }
         }
     }
 
@@ -314,16 +302,32 @@ class WinstoneRepository(
 
                 var isSuccess = false
                 if (!token.isNullOrBlank()) {
-                    val response = networkClient.api.logCall("Bearer $token", payload)
-                    isSuccess = response.isSuccessful
+                    // Try authoritative public endpoint first
+                    val publicResponse = try {
+                        networkClient.api.logCallPublic("Bearer $token", payload)
+                    } catch (e: Exception) {
+                        null
+                    }
+
+                    if (publicResponse?.isSuccessful == true) {
+                        isSuccess = true
+                    } else {
+                        // Fallback to v1 endpoint
+                        val v1Response = try {
+                            networkClient.api.logCall("Bearer $token", payload)
+                        } catch (e: Exception) {
+                            null
+                        }
+                        isSuccess = v1Response?.isSuccessful == true
+                    }
                 }
 
-                if (isSuccess || token.isNullOrBlank()) {
+                if (isSuccess) {
                     val updatedCall = call.copy(syncStatus = "SYNCED")
                     callDao.updateCall(updatedCall)
                     true
                 } else {
-                    val failedCall = call.copy(syncStatus = "FAILED")
+                    val failedCall = call.copy(syncStatus = "PENDING")
                     callDao.updateCall(failedCall)
                     false
                 }
@@ -434,19 +438,38 @@ class WinstoneRepository(
                     val consentBody = "INFORMATIONAL".toRequestBody("text/plain".toMediaTypeOrNull())
                     val idempotencyBody = rec.idempotencyKey.toRequestBody("text/plain".toMediaTypeOrNull())
 
-                    val response = networkClient.api.uploadRecording(
-                        token = "Bearer $token",
-                        file = body,
-                        callId = callIdBody,
-                        leadId = leadIdBody,
-                        durationSeconds = durationBody,
-                        consentStatus = consentBody,
-                        idempotencyKey = idempotencyBody
-                    )
-                    uploadSucceeded = response.isSuccessful
-                } else {
-                    // Offline testing mode when no token is present
-                    uploadSucceeded = true
+                    val publicResponse = try {
+                        networkClient.api.uploadRecordingPublic(
+                            token = "Bearer $token",
+                            file = body,
+                            callId = callIdBody,
+                            leadId = leadIdBody,
+                            durationSeconds = durationBody,
+                            consentStatus = consentBody,
+                            idempotencyKey = idempotencyBody
+                        )
+                    } catch (e: Exception) {
+                        null
+                    }
+
+                    if (publicResponse?.isSuccessful == true) {
+                        uploadSucceeded = true
+                    } else {
+                        val v1Response = try {
+                            networkClient.api.uploadRecording(
+                                token = "Bearer $token",
+                                file = body,
+                                callId = callIdBody,
+                                leadId = leadIdBody,
+                                durationSeconds = durationBody,
+                                consentStatus = consentBody,
+                                idempotencyKey = idempotencyBody
+                            )
+                        } catch (e: Exception) {
+                            null
+                        }
+                        uploadSucceeded = v1Response?.isSuccessful == true
+                    }
                 }
 
                 if (uploadSucceeded) {
@@ -560,41 +583,72 @@ class WinstoneRepository(
     suspend fun login(email: String, password: String, employeeId: String?): Boolean {
         return withContext(Dispatchers.IO) {
             if (email.isNotBlank() && password.isNotBlank()) {
-                val empId = employeeId ?: "WN-88042"
+                val empId = employeeId?.takeIf { it.isNotBlank() } ?: "WN-${email.hashCode().toString().takeLast(5)}"
                 val role = if (email.contains("admin") || email.contains("authority")) UserRole.AUTHORITY else UserRole.AGENT
-                val session = UserSession(
-                    agentId = "agent_${empId.lowercase().replace("-", "_")}",
-                    workEmail = email,
-                    employeeId = empId,
-                    fullName = if (email.contains("rahim")) "Rahim Khan" else email.substringBefore("@").replace(".", " ").capitalize(),
-                    role = role,
-                    accessToken = "wn_jwt_${UUID.randomUUID().toString().take(12)}",
-                    isLoggedIn = true
-                )
 
-                // Try authenticating against server
+                // 1. Authenticate against server
                 try {
                     val response = networkClient.api.login(LoginRequest(email, password, empId))
                     if (response.isSuccessful && response.body()?.success == true) {
                         val body = response.body()!!
-                        authRepository.saveSession(
-                            session = session.copy(
-                                agentId = body.agentId,
-                                fullName = body.fullName,
-                                role = try { UserRole.valueOf(body.role) } catch (_: Exception) { role }
-                            ),
-                            token = body.accessToken
+                        val session = UserSession(
+                            agentId = body.agentId,
+                            workEmail = email,
+                            employeeId = empId,
+                            fullName = body.fullName,
+                            role = try { UserRole.valueOf(body.role) } catch (_: Exception) { role },
+                            accessToken = body.accessToken,
+                            isLoggedIn = true
                         )
+                        authRepository.saveSession(session, body.accessToken)
                         logAudit("LOGIN_SUCCESS", session.agentId, metadata = "Authenticated via Winstone CRM API")
+                        
+                        // Register/enroll device with CRM backend
+                        try {
+                            val enrollReq = DeviceRegisterRequest(
+                                deviceId = authRepository.getDeviceId(),
+                                model = "Proton HyperX (Android 16)",
+                                employeeId = empId,
+                                agentName = body.fullName,
+                                androidVersion = "Android 16",
+                                capabilityStatus = "METADATA_ONLY",
+                                consentPolicy = "INFORMATIONAL"
+                            )
+                            val enrollResp = try {
+                                networkClient.api.enrollDevicePublic("Bearer ${body.accessToken}", enrollReq)
+                            } catch (e: Exception) {
+                                null
+                            }
+                            if (enrollResp?.isSuccessful != true) {
+                                networkClient.api.registerDevice("Bearer ${body.accessToken}", enrollReq)
+                            }
+                        } catch (e: Exception) {
+                            Log.d(TAG, "Device registration deferred: ${e.message}")
+                        }
+
+                        // Synchronize assigned CRM leads
+                        fetchAssignedLeadsFromCrm()
+                        refreshDeviceProfile()
                         return@withContext true
                     }
                 } catch (e: Exception) {
-                    Log.d(TAG, "API login offline fallback applied: ${e.message}")
+                    Log.w(TAG, "API login attempt failed: ${e.message}")
                 }
 
-                // Save session in EncryptedSharedPreferences
+                // Fallback for valid non-empty login in offline environment
+                val session = UserSession(
+                    agentId = "agent_${empId.lowercase().replace("-", "_")}",
+                    workEmail = email,
+                    employeeId = empId,
+                    fullName = email.substringBefore("@").replace(".", " ").capitalize(),
+                    role = role,
+                    accessToken = "wn_jwt_${UUID.randomUUID().toString().take(12)}",
+                    isLoggedIn = true
+                )
                 authRepository.saveSession(session, session.accessToken)
                 logAudit("LOGIN_SUCCESS", session.agentId, metadata = "Authenticated agent on Proton HyperX")
+                fetchAssignedLeadsFromCrm()
+                refreshDeviceProfile()
                 return@withContext true
             }
             false
@@ -602,9 +656,11 @@ class WinstoneRepository(
     }
 
     fun logout() {
+        val agentId = authRepository.session.value.agentId
         authRepository.logout()
         CoroutineScope(Dispatchers.IO).launch {
-            logAudit("ACCESS_DENIED", "session_revoked", metadata = "Agent logged out from Proton HyperX")
+            leadDao.clearAllLeads()
+            logAudit("ACCESS_DENIED", "session_revoked", metadata = "Agent $agentId logged out from Proton HyperX. Cache cleared.")
         }
     }
 

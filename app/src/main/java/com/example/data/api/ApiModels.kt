@@ -26,10 +26,13 @@ data class LoginResponse(
 data class DeviceRegisterRequest(
     val deviceId: String,
     val model: String,
-    val androidVersion: String,
-    val buildNumber: String,
-    val appVersion: String,
-    val capabilityStatus: String
+    val androidVersion: String = "Android 16",
+    val buildNumber: String = "HYPERX.260901.001",
+    val appVersion: String = "1.0.0",
+    val capabilityStatus: String = "METADATA_ONLY",
+    val employeeId: String? = null,
+    val agentName: String? = null,
+    val consentPolicy: String? = null
 )
 
 @JsonClass(generateAdapter = true)

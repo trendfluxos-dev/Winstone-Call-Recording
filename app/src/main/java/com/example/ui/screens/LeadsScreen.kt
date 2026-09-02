@@ -54,6 +54,8 @@ fun LeadsScreen(
         }
     }
 
+    val isSyncing by viewModel.isSyncing.collectAsState()
+
     Scaffold(
         topBar = {
             TopAppBar(
@@ -61,6 +63,18 @@ fun LeadsScreen(
                 navigationIcon = {
                     IconButton(onClick = onBack, modifier = Modifier.testTag("btn_leads_back")) {
                         Icon(Icons.AutoMirrored.Filled.ArrowBack, contentDescription = "Back")
+                    }
+                },
+                actions = {
+                    IconButton(
+                        onClick = { viewModel.refreshLeads() },
+                        modifier = Modifier.testTag("btn_leads_refresh")
+                    ) {
+                        if (isSyncing) {
+                            CircularProgressIndicator(modifier = Modifier.size(20.dp), strokeWidth = 2.dp)
+                        } else {
+                            Icon(Icons.Default.Refresh, contentDescription = "Refresh Leads")
+                        }
                     }
                 }
             )
@@ -95,7 +109,7 @@ fun LeadsScreen(
             Spacer(modifier = Modifier.height(12.dp))
 
             Text(
-                text = "${filteredLeads.size} Assigned Leads (Bangladesh Territory)",
+                text = "${filteredLeads.size} Assigned Leads",
                 fontSize = 12.sp,
                 color = MaterialTheme.colorScheme.onSurfaceVariant,
                 fontWeight = FontWeight.Medium
@@ -103,18 +117,53 @@ fun LeadsScreen(
 
             Spacer(modifier = Modifier.height(8.dp))
 
-            LazyColumn(
-                modifier = Modifier.fillMaxSize(),
-                verticalArrangement = Arrangement.spacedBy(10.dp),
-                contentPadding = PaddingValues(bottom = 24.dp)
-            ) {
-                items(filteredLeads, key = { it.leadId }) { lead ->
-                    LeadCard(
-                        lead = lead,
-                        language = language,
-                        onCall = { viewModel.dialLead(lead.phoneNumber) },
-                        onTimeline = { selectedLeadForTimeline = lead }
-                    )
+            if (filteredLeads.isEmpty()) {
+                Box(
+                    modifier = Modifier
+                        .fillMaxSize()
+                        .padding(32.dp),
+                    contentAlignment = Alignment.Center
+                ) {
+                    Column(
+                        horizontalAlignment = Alignment.CenterHorizontally,
+                        verticalArrangement = Arrangement.spacedBy(12.dp)
+                    ) {
+                        Icon(
+                            Icons.Default.PersonSearch,
+                            contentDescription = null,
+                            modifier = Modifier.size(48.dp),
+                            tint = MaterialTheme.colorScheme.primary.copy(alpha = 0.6f)
+                        )
+                        Text(
+                            text = if (searchQuery.isNotBlank()) "No leads matching '$searchQuery'" else "No assigned leads found",
+                            fontSize = 15.sp,
+                            fontWeight = FontWeight.SemiBold,
+                            color = MaterialTheme.colorScheme.onSurfaceVariant
+                        )
+                        Button(
+                            onClick = { viewModel.refreshLeads() },
+                            modifier = Modifier.testTag("btn_empty_sync_leads")
+                        ) {
+                            Icon(Icons.Default.CloudSync, contentDescription = null, modifier = Modifier.size(18.dp))
+                            Spacer(modifier = Modifier.width(8.dp))
+                            Text("Fetch from CRM")
+                        }
+                    }
+                }
+            } else {
+                LazyColumn(
+                    modifier = Modifier.fillMaxSize(),
+                    verticalArrangement = Arrangement.spacedBy(10.dp),
+                    contentPadding = PaddingValues(bottom = 24.dp)
+                ) {
+                    items(filteredLeads, key = { it.leadId }) { lead ->
+                        LeadCard(
+                            lead = lead,
+                            language = language,
+                            onCall = { viewModel.dialLead(lead.phoneNumber) },
+                            onTimeline = { selectedLeadForTimeline = lead }
+                        )
+                    }
                 }
             }
         }

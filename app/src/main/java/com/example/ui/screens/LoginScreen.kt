@@ -30,9 +30,9 @@ fun LoginScreen(
     val language by viewModel.language.collectAsState()
     val crmBaseUrl by viewModel.crmBaseUrl.collectAsState()
 
-    var email by remember { mutableStateOf("rahim.khan@winstonecrm.com") }
-    var password by remember { mutableStateOf("••••••••••••") }
-    var employeeId by remember { mutableStateOf("WN-88042") }
+    var email by remember { mutableStateOf("") }
+    var password by remember { mutableStateOf("") }
+    var employeeId by remember { mutableStateOf("") }
     var serverUrl by remember(crmBaseUrl) { mutableStateOf(crmBaseUrl) }
     var showServerConfig by remember { mutableStateOf(false) }
     var errorMessage by remember { mutableStateOf<String?>(null) }

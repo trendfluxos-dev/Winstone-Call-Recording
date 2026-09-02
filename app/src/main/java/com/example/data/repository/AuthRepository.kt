@@ -65,12 +65,12 @@ class AuthRepository(private val context: Context) {
     }
 
     private fun loadStoredSession(): UserSession {
-        val isLoggedIn = securePrefs.getBoolean(KEY_IS_LOGGED_IN, true)
-        val token = securePrefs.getString(KEY_ACCESS_TOKEN, "wn_sec_token_94719284") ?: "wn_sec_token_94719284"
-        val agentId = securePrefs.getString(KEY_AGENT_ID, "agent_rahim_01") ?: "agent_rahim_01"
-        val email = securePrefs.getString(KEY_WORK_EMAIL, "rahim.khan@winstonecrm.com") ?: "rahim.khan@winstonecrm.com"
-        val empId = securePrefs.getString(KEY_EMPLOYEE_ID, "WN-88042") ?: "WN-88042"
-        val fullName = securePrefs.getString(KEY_FULL_NAME, "Rahim Khan") ?: "Rahim Khan"
+        val isLoggedIn = securePrefs.getBoolean(KEY_IS_LOGGED_IN, false)
+        val token = securePrefs.getString(KEY_ACCESS_TOKEN, "") ?: ""
+        val agentId = securePrefs.getString(KEY_AGENT_ID, "") ?: ""
+        val email = securePrefs.getString(KEY_WORK_EMAIL, "") ?: ""
+        val empId = securePrefs.getString(KEY_EMPLOYEE_ID, "") ?: ""
+        val fullName = securePrefs.getString(KEY_FULL_NAME, "") ?: ""
         val roleStr = securePrefs.getString(KEY_USER_ROLE, UserRole.AGENT.name) ?: UserRole.AGENT.name
         val role = try { UserRole.valueOf(roleStr) } catch (_: Exception) { UserRole.AGENT }
 
@@ -81,19 +81,19 @@ class AuthRepository(private val context: Context) {
             fullName = fullName,
             role = role,
             accessToken = token,
-            isLoggedIn = isLoggedIn
+            isLoggedIn = isLoggedIn && token.isNotBlank()
         )
     }
 
     fun getAuthToken(): String? {
         val token = securePrefs.getString(KEY_ACCESS_TOKEN, null)
-        return if (!token.isNullOrBlank()) token else _session.value.accessToken
+        return if (!token.isNullOrBlank()) token else _session.value.accessToken.takeIf { it.isNotBlank() }
     }
 
     fun getDeviceId(): String {
         var devId = securePrefs.getString(KEY_DEVICE_ID, null)
         if (devId.isNullOrBlank()) {
-            devId = "hyperx_hw1_${System.currentTimeMillis() % 100000}"
+            devId = "device_${java.util.UUID.randomUUID().toString().take(12)}"
             securePrefs.edit().putString(KEY_DEVICE_ID, devId).apply()
         }
         return devId

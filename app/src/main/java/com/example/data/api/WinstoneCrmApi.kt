@@ -25,11 +25,24 @@ interface WinstoneCrmApi {
         @Header("Authorization") token: String
     ): Response<LoginResponse>
 
+    // Public / Deployed Winstone CRM routes
+    @POST("api/public/device-enroll")
+    suspend fun enrollDevicePublic(
+        @Header("Authorization") token: String,
+        @Body request: DeviceRegisterRequest
+    ): Response<DeviceRegisterResponse>
+
     @POST("api/v1/devices/register")
     suspend fun registerDevice(
         @Header("Authorization") token: String,
         @Body request: DeviceRegisterRequest
     ): Response<DeviceRegisterResponse>
+
+    @POST("api/public/call-events")
+    suspend fun logCallPublic(
+        @Header("Authorization") token: String,
+        @Body payload: CallSyncPayload
+    ): Response<CallSyncResponse>
 
     @POST("api/v1/calls/log")
     suspend fun logCall(
@@ -44,6 +57,18 @@ interface WinstoneCrmApi {
     ): Response<List<CallSyncResponse>>
 
     @Multipart
+    @POST("api/public/call-recordings")
+    suspend fun uploadRecordingPublic(
+        @Header("Authorization") token: String,
+        @Part file: MultipartBody.Part,
+        @Part("call_id") callId: RequestBody,
+        @Part("lead_id") leadId: RequestBody?,
+        @Part("duration_seconds") durationSeconds: RequestBody,
+        @Part("consent_status") consentStatus: RequestBody,
+        @Part("idempotency_key") idempotencyKey: RequestBody
+    ): Response<RecordingUploadResponse>
+
+    @Multipart
     @POST("api/v1/recordings/upload")
     suspend fun uploadRecording(
         @Header("Authorization") token: String,
@@ -54,6 +79,11 @@ interface WinstoneCrmApi {
         @Part("consent_status") consentStatus: RequestBody,
         @Part("idempotency_key") idempotencyKey: RequestBody
     ): Response<RecordingUploadResponse>
+
+    @GET("api/public/agent-leads")
+    suspend fun getAssignedLeadsPublic(
+        @Header("Authorization") token: String
+    ): Response<LeadsResponse>
 
     @GET("api/v1/leads")
     suspend fun getAssignedLeads(

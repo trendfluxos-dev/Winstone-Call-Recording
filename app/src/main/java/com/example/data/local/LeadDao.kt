@@ -27,6 +27,12 @@ interface LeadDao {
     @Query("UPDATE leads SET lastContactedAt = :timestamp, callsCount = callsCount + 1 WHERE leadId = :leadId")
     suspend fun recordCallForLead(leadId: String, timestamp: Long)
 
+    @Query("SELECT * FROM leads ORDER BY name ASC")
+    suspend fun getAllLeadsList(): List<CrmLead>
+
+    @Query("DELETE FROM leads")
+    suspend fun clearAllLeads()
+
     @Query("SELECT COUNT(*) FROM leads")
     fun getLeadsCount(): Flow<Int>
 }
